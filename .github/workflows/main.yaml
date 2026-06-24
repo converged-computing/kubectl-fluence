@@ -122,8 +122,8 @@ jobs:
           set -e
           echo "$out"
           [ $rc -eq 0 ] || { echo "select exited $rc"; exit 1; }
-          echo "$out" | grep -q 'fluence.flux-framework.org/backend: gpu-l4' \
-            || { echo "expected backend=gpu-l4"; exit 1; }
+          echo "$out" | grep -q 'fluence.flux-framework.org/require-backend: gpu-l4' \
+            || { echo "expected require-backend=gpu-l4"; exit 1; }
           # the ConfigMap intersection should have dropped gpu-t4
           echo "$out" | grep -q 'dropped gpu-t4' \
             || { echo "expected gpu-t4 to be dropped by scheduler-offering intersection"; exit 1; }
@@ -138,9 +138,9 @@ jobs:
             -f examples/generic-gpu.yaml \
             --attributes examples/generic-attributes.yaml
           got=$(kubectl get pod training-leader \
-            -o jsonpath='{.metadata.annotations.fluence\.flux-framework\.org/backend}')
+            -o jsonpath='{.metadata.annotations.fluence\.flux-framework\.org/require-backend}')
           echo "pinned backend: $got"
-          [ "$got" = "gpu-l4" ] || { echo "annotation not applied to cluster object"; exit 1; }
+          [ "$got" = "gpu-l4" ] || { echo "require-backend annotation not applied to cluster object"; exit 1; }
 
       # quantum (Braket) path: same engine, cost-from-components. No AWS needed
       # for a cost-only policy (queue policies would need braket-live + creds).
@@ -154,8 +154,8 @@ jobs:
           set -e
           echo "$out"
           [ $rc -eq 0 ] || { echo "select exited $rc"; exit 1; }
-          echo "$out" | grep -q 'fluence.flux-framework.org/backend: sv1' \
-            || { echo "expected backend=sv1"; exit 1; }
+          echo "$out" | grep -q 'fluence.flux-framework.org/require-backend: sv1' \
+            || { echo "expected require-backend=sv1"; exit 1; }
 
       - name: Non-Fluence manifest passes through untouched
         run: |

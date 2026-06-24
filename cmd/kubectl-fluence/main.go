@@ -66,6 +66,7 @@ type options struct {
 	costTol     float64
 	forceSelect bool
 	dryRun      bool
+	confirm     bool     // prompt for y/n approval before applying
 	passthrough []string // remaining args forwarded to kubectl
 }
 
@@ -115,6 +116,21 @@ func run(verb string, args []string) error {
 		}
 	}
 
+	// Optional interactive confirmation before applying. The selection results
+	// were already printed to stderr (one "selected backend ..." line per
+	// resolved object); --confirm lets the user inspect and approve, edit, or
+	// cancel. Off by default so automated/experiment runs proceed unattended.
+	if opts.confirm && !opts.dryRun {
+		fmt.Fprint(os.Stderr, "\nApply with the selections above? [y]es / [n]o (cancel): ")
+		var resp string
+		fmt.Fscanln(os.Stdin, &resp)
+		resp = strings.ToLower(strings.TrimSpace(resp))
+		if resp != "y" && resp != "yes" {
+			fmt.Fprintln(os.Stderr, "cancelled; nothing applied")
+			return nil
+		}
+	}
+
 	// Pass the mutated manifest to real kubectl via stdin.
 	return applyWithKubectl(verb, combined, opts.passthrough)
 }
@@ -134,7 +150,7 @@ func processDoc(doc string, opts options, offers []string) (string, bool, error)
 	policy := anns[types.AnnSelectPolicy]
 
 	// Honor an explicit pre-existing pin unless --force-select.
-	if existing, ok := anns[types.AnnBackend]; ok && existing != "" && !opts.forceSelect {
+	if existing, ok := anns[types.AnnRequireBackend]; ok && existing != "" && !opts.forceSelect {
 		fmt.Fprintf(os.Stderr, "note: %s already pinned to %q; skipping selection "+
 			"(use --force-select to override)\n", name(obj), existing)
 		return doc, false, nil
@@ -170,7 +186,7 @@ func processDoc(doc string, opts options, offers []string) (string, bool, error)
 	}
 
 	// Stamp the result: the device-pin annotation + an audit annotation.
-	setAnnotation(obj, types.AnnBackend, res.Chosen)
+	setAnnotation(obj, types.AnnRequireBackend, res.Chosen)
 	auditJSON, _ := json.Marshal(res)
 	setAnnotation(obj, types.AnnSelectResult, string(auditJSON))
 
@@ -237,6 +253,7 @@ FLAGS:
       --fluence-ns     namespace of the fluence-resources ConfigMap (default kube-system)
       --cost-tol       tolerance band for the cheapest-equivalent set (default 0)
       --force-select   override an existing backend pin
+      --confirm        show selections and prompt for y/n approval before applying
       --dry-run        print the mutated manifest (still applies unless 'select')
 
 Objects that target Fluence and carry the annotation

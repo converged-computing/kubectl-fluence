@@ -15,8 +15,9 @@ const (
 	AnnSelectShots       = "fluence.flux-framework.org/select-shots"       // request size for cost math (else inferred)
 
 	// Result annotations (plugin-authored):
-	AnnBackend      = "fluence.flux-framework.org/backend"       // chosen device — the device-pin Fluence already honors
-	AnnSelectResult = "fluence.flux-framework.org/select-result" // JSON audit trail
+	AnnRequireBackend = "fluence.flux-framework.org/require-backend" // chosen device — the device-pin Fluence already honors
+	AnnBackend        = "fluence.flux-framework.org/backend"         // chosen device — the device-pin Fluence already honors
+	AnnSelectResult   = "fluence.flux-framework.org/select-result"   // JSON audit trail
 
 	// Detection:
 	LabelGroup    = "fluence.flux-framework.org/group" // marks a Fluence gang member / PodGroup

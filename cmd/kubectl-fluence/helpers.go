@@ -53,6 +53,9 @@ func parseArgs(args []string) (options, error) {
 		case a == "--force-select":
 			o.forceSelect = true
 			i++
+		case a == "--confirm":
+			o.confirm = true
+			i++
 		case a == "--dry-run":
 			o.dryRun = true
 			// also forward to kubectl so its dry-run semantics apply on apply
