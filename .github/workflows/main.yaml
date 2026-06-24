@@ -1,0 +1,176 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25"
+  # Fluence requires Kubernetes 1.36.x. Pin the kind node image to that line so
+  # CI exercises the kubectl/ConfigMap path against the supported K8s version.
+  # (kind v0.32.0 default node image for Kubernetes 1.36.1.)
+  KIND_NODE_IMAGE: "kindest/node:v1.36.1@sha256:3489c7674813ba5d8b1a9977baea8a6e553784dab7b84759d1014dbd78f7ebd5"
+  KIND_VERSION: "v0.32.0"
+
+jobs:
+  test:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Verify gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Build plugin binary
+        run: go build -o kubectl-fluence ./cmd/kubectl-fluence
+
+      - name: Test (race + coverage)
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+  smoke:
+    name: end-to-end on kind (k8s 1.36.x)
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build plugin
+        run: |
+          go build -o kubectl-fluence ./cmd/kubectl-fluence
+          # put it on PATH so it is discoverable as `kubectl fluence`
+          sudo install -m 0755 kubectl-fluence /usr/local/bin/kubectl-fluence
+
+      - name: Create kind cluster (Kubernetes 1.36.x)
+        uses: helm/kind-action@v1
+        with:
+          version: ${{ env.KIND_VERSION }}
+          node_image: ${{ env.KIND_NODE_IMAGE }}
+          cluster_name: fluence-ci
+
+      - name: Confirm cluster is 1.36.x
+        run: |
+          kubectl version -o json | tee /tmp/ver.json
+          server=$(kubectl version -o json | python3 -c \
+            'import json,sys; print(json.load(sys.stdin)["serverVersion"]["minor"])')
+          echo "server minor: $server"
+          case "$server" in
+            36|36+) echo "ok, 1.36.x" ;;
+            *) echo "expected Kubernetes 1.36.x, got minor=$server"; exit 1 ;;
+          esac
+
+      # Stand in for the Fluence resource graph so the ConfigMap-intersection
+      # path is exercised (no Fluence install needed for the client-side plugin).
+      # It offers gpu-a100 and gpu-l4 but NOT gpu-t4, so the intersection should
+      # drop gpu-t4 even though it is in the attribute file.
+      - name: Create stand-in fluence-resources ConfigMap
+        run: |
+          kubectl create configmap fluence-resources -n kube-system \
+            --from-literal=resources.yaml='
+          - name: gpu-a100
+          - name: gpu-l4
+          - name: sv1
+          - name: rigetti_cepheus
+          - name: iqm_garnet
+          '
+
+      # Generic (non-quantum) path: GPU selection by memory + cost, against the
+      # real cluster. require:min_memory_gb=24,min-cost -> gpu-l4
+      # (gpu-t4 excluded by intersection AND by the memory constraint).
+      - name: kubectl fluence select (generic GPU, reads ConfigMap)
+        run: |
+          set +e
+          out=$(kubectl fluence select \
+            -f examples/generic-gpu.yaml \
+            --attributes examples/generic-attributes.yaml 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          [ $rc -eq 0 ] || { echo "select exited $rc"; exit 1; }
+          echo "$out" | grep -q 'fluence.flux-framework.org/backend: gpu-l4' \
+            || { echo "expected backend=gpu-l4"; exit 1; }
+          # the ConfigMap intersection should have dropped gpu-t4
+          echo "$out" | grep -q 'dropped gpu-t4' \
+            || { echo "expected gpu-t4 to be dropped by scheduler-offering intersection"; exit 1; }
+
+      # apply against the real cluster, then verify the annotation landed.
+      # The pod targets schedulerName: fluence, which isn't installed here, so it
+      # stays Pending — that's expected. We only assert the client-side annotation
+      # was applied to the cluster object, not that it scheduled.
+      - name: kubectl fluence apply (generic GPU)
+        run: |
+          kubectl fluence apply \
+            -f examples/generic-gpu.yaml \
+            --attributes examples/generic-attributes.yaml
+          got=$(kubectl get pod training-leader \
+            -o jsonpath='{.metadata.annotations.fluence\.flux-framework\.org/backend}')
+          echo "pinned backend: $got"
+          [ "$got" = "gpu-l4" ] || { echo "annotation not applied to cluster object"; exit 1; }
+
+      # quantum (Braket) path: same engine, cost-from-components. No AWS needed
+      # for a cost-only policy (queue policies would need braket-live + creds).
+      - name: kubectl fluence select (quantum Braket)
+        run: |
+          set +e
+          out=$(kubectl fluence select \
+            -f examples/gang-select.yaml \
+            --attributes examples/attributes.yaml 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          [ $rc -eq 0 ] || { echo "select exited $rc"; exit 1; }
+          echo "$out" | grep -q 'fluence.flux-framework.org/backend: sv1' \
+            || { echo "expected backend=sv1"; exit 1; }
+
+      - name: Non-Fluence manifest passes through untouched
+        run: |
+          cat > /tmp/plain.yaml <<'YAML'
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: plain
+          spec:
+            containers:
+              - name: c
+                image: busybox
+          YAML
+          out=$(kubectl fluence select -f /tmp/plain.yaml --attributes examples/generic-attributes.yaml 2>&1)
+          if echo "$out" | grep -q 'select-result'; then
+            echo "non-Fluence pod should not be annotated"; exit 1
+          fi
+          echo "passthrough ok"

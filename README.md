@@ -1,5 +1,7 @@
 # kubectl-fluence
 
+![img/kubectl-fluence.png](img/kubectl-fluence.png)
+
 A `kubectl` plugin for **client-side backend selection** with the
 [Fluence](https://github.com/converged-computing/fluence) scheduler.
 
