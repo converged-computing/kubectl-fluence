@@ -64,15 +64,19 @@ func SchedulerOfferings(namespace string, kubectlArgs []string) ([]string, error
 // This is intentionally permissive; the intersection later restricts to what
 // the user also has attributes for.
 func parseDeviceNames(body string) ([]string, error) {
-	// Try structured parse first.
-	var doc map[string]interface{}
+	// Try structured parse first. Unmarshal into a generic interface{} so that
+	// BOTH a top-level mapping (the full resource graph) and a top-level list
+	// (e.g. a simple `- name: x` offering list) are handled — a map-only target
+	// fails to unmarshal a YAML sequence root.
+	var doc interface{}
 	if err := yaml.Unmarshal([]byte(body), &doc); err == nil {
 		if names := walkForNames(doc); len(names) > 0 {
 			return dedupe(names), nil
 		}
 	}
-	// Fallback: regex for `name: <token>` lines.
-	re := regexp.MustCompile(`(?m)^\s*name:\s*([A-Za-z0-9_\-]+)\s*$`)
+	// Fallback: regex for `name: <token>` lines, allowing an optional `- ` list
+	// prefix (so `- name: gpu-l4` matches as well as `  name: gpu-l4`).
+	re := regexp.MustCompile(`(?m)^\s*-?\s*name:\s*"?([A-Za-z0-9_\-]+)"?\s*$`)
 	var names []string
 	for _, m := range re.FindAllStringSubmatch(body, -1) {
 		names = append(names, m[1])
