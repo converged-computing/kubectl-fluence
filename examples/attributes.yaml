@@ -1,0 +1,22 @@
+version: 1
+backends:
+  - name: sv1
+    provider: braket
+    device_arn: arn:aws:braket:::device/quantum-simulator/amazon/sv1
+    region: us-east-1
+    cost_per_minute: 0.075
+    qubits: 34
+  - name: rigetti_cepheus
+    provider: braket
+    device_arn: arn:aws:braket:us-west-1::device/qpu/rigetti/Cepheus-1-108Q
+    region: us-west-1
+    cost_per_task: 0.30
+    cost_per_shot: 0.00090
+    qubits: 108
+  - name: iqm_garnet
+    provider: braket
+    device_arn: arn:aws:braket:eu-north-1::device/qpu/iqm/Garnet
+    region: eu-north-1
+    cost_per_task: 0.30
+    cost_per_shot: 0.00145
+    qubits: 20

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: gang-leader
+  labels:
+    fluence.flux-framework.org/group: my-gang
+  annotations:
+    fluence.flux-framework.org/select-backend: braket
+    fluence.flux-framework.org/select-policy: "require:min_qubits=20,min-cost"
+    fluence.flux-framework.org/select-shots: "1000"
+spec:
+  schedulerName: fluence
+  containers:
+    - name: leader
+      image: gang:latest

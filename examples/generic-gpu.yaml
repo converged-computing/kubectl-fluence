@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: training-leader
+  labels:
+    fluence.flux-framework.org/group: training
+  annotations:
+    fluence.flux-framework.org/select-policy: "require:min_memory_gb=24,min-cost"
+spec:
+  schedulerName: fluence
+  containers:
+    - name: trainer
+      image: trainer:latest

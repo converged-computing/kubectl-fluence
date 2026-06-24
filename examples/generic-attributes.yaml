@@ -1,0 +1,24 @@
+version: 1
+backends:
+  - name: gpu-a100
+    provider: generic
+    region: us-east-1
+    qubits: 0
+    attributes:
+      cost_usd: 3.20
+      memory_gb: 80
+      throughput: 312
+  - name: gpu-l4
+    provider: generic
+    region: us-east-1
+    attributes:
+      cost_usd: 0.80
+      memory_gb: 24
+      throughput: 121
+  - name: gpu-t4
+    provider: generic
+    region: us-west-2
+    attributes:
+      cost_usd: 0.35
+      memory_gb: 16
+      throughput: 65

@@ -1,0 +1,17 @@
+# Example krew manifest (fill in version/sha256/urls when releasing).
+apiVersion: krew.googlecontainertools.github.com/v1alpha2
+kind: Plugin
+metadata:
+  name: fluence
+spec:
+  shortDescription: Client-side quantum backend selection for Fluence
+  homepage: https://github.com/converged-computing/kubectl-fluence
+  version: v0.1.0
+  platforms:
+    - selector:
+        matchLabels:
+          os: linux
+          arch: amd64
+      uri: https://github.com/converged-computing/kubectl-fluence/releases/download/v0.1.0/kubectl-fluence_linux_amd64.tar.gz
+      sha256: "TODO"
+      bin: kubectl-fluence
